@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f7f8f4"><meta name="description" content="Book trusted local services, support cooperative workers, and keep every price transparent.">
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/svg+xml" href="/static/icon.svg"><link rel="stylesheet" href="/static/styles.css">
+  <title>FixMate — local work, shared fairly</title>
+</head>
+<body>
+  <div class="app-frame">
+    <header class="topbar">
+      <a class="brand" href="#home" aria-label="FixMate home"><span class="brand-mark">f</span><span>fixmate<span class="brand-dot">.</span><small>COOPERATIVE SERVICES</small></span></a>
+      <div class="top-actions"><span class="connection"><i></i><span id="connection-label">Connecting</span></span><label class="language-picker"><span class="sr-only">Language / भाषा</span><select id="language-select" aria-label="Change language"><option value="en">English</option><option value="hi">हिन्दी</option></select></label><button class="avatar" id="account-button" aria-label="Account menu">G</button></div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar" aria-label="Main navigation"><div class="side-label">YOUR SPACE</div><nav id="main-nav"></nav><div class="side-card"><span class="side-flower">✳</span><strong>Made for the people who make it work.</strong><p>Every booking supports local cooperative workers.</p><span class="side-tag">FAIR WORK · LOCAL CARE</span></div><button class="quiet-button" id="signout-button" hidden>Sign out</button></aside>
+      <main id="view" tabindex="-1" aria-live="polite"><div class="loading"><span class="spinner"></span>Setting up your space…</div></main>
+    </div>
+    <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile navigation"></nav>
+  </div>
+
+  <dialog id="auth-dialog" class="modal"><form method="dialog" class="modal-dismiss"><button aria-label="Close">×</button></form><div class="modal-content"><div class="eyebrow">WELCOME TO FIXMATE</div><h2 id="auth-title">Good work starts here.</h2><p id="auth-copy" class="muted">Sign in to book a service or manage your cooperative work.</p><div class="auth-tabs"><button class="selected" data-auth-mode="login">Sign in</button><button data-auth-mode="register">Create account</button></div><form id="auth-form" class="stack-form"><label>Your name<input name="name" autocomplete="name" placeholder="Full name" hidden></label><label>Email<input name="email" type="email" autocomplete="email" placeholder="you@example.com" required></label><label>Phone<input name="phone" autocomplete="tel" placeholder="10-digit mobile number" hidden></label><label>Password<input name="password" type="password" autocomplete="current-password" minlength="8" placeholder="At least 8 characters" required></label><label id="role-field" hidden>How will you use FixMate?<select name="role"><option value="customer">Find a service</option><option value="worker">Offer my skills</option></select></label><button class="button primary full" type="submit">Continue <span>→</span></button></form><div class="demo-box"><strong>Try the demo</strong><div><button data-demo="customer">Customer</button><button data-demo="worker">Worker</button><button data-demo="admin">Co-op admin</button></div><small>Passwords shown on the project’s README.</small></div><div class="modal-foot">By continuing, you support fair local work.</div></div></dialog>
+
+  <dialog id="booking-dialog" class="modal booking-modal"><form method="dialog" class="modal-dismiss"><button aria-label="Close">×</button></form><div id="booking-content" class="modal-content"></div></dialog>
+  <dialog id="assistant-dialog" class="modal assistant-modal"><form method="dialog" class="modal-dismiss"><button aria-label="Close">×</button></form><div class="modal-content"><div class="eyebrow">FIXMATE HELPER</div><h2>What can I help with?</h2><p class="muted">Ask about bookings, worker profiles or payments.</p><div id="assistant-chat" class="assistant-chat"><div class="chat-bubble assistant-bubble">Hi there. I can help you find your way around FixMate.</div></div><form id="assistant-form" class="assistant-form"><button type="button" class="mic-button" id="mic-button" title="Speak your question">⌁</button><input name="question" placeholder="Try “How do I book a plumber?”" required maxlength="500"><button class="button primary" type="submit">Ask</button></form><small id="mic-hint" class="muted">Voice input availability depends on your browser.</small></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/static/i18n.js" defer></script><script src="/static/app.js" defer></script>
+</body>
+</html>
