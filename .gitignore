@@ -1,0 +1,13 @@
+.env
+.venv/
+.runtime-packages/
+.verify-packages/
+venv/
+__pycache__/
+*.py[cod]
+fixmate.db*
+.pytest_cache/
+.coverage
+node_modules/
+dist/
+*.log
