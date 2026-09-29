@@ -1,4 +1,4 @@
-# FixMate - Cooperative Service Marketplace
+# FixMate — Cooperative Service Marketplace
 
 FixMate connects households with verified local service workers managed by labour cooperatives. This repository includes an installable mobile-first app, a FastAPI backend, a local SQLite database, an explainable worker matcher, and a time-validated demand-forecasting demonstration.
 
@@ -33,20 +33,24 @@ Other seeded worker accounts use `worker123`. These are local demo credentials o
 - Customer registration and sign-in; browse nine service categories and worker profiles; request an urgent or scheduled booking with a location; see matching factors, status updates, invoice, demo payment record, and review form.
 - Worker registration, skill/certificate/rate/location profile, cooperative verification state, availability, assigned jobs, job state changes, earnings ledger, and welfare record.
 - Cooperative admin dashboard, worker verification/suspension, booking oversight, workforce demand forecast, and model evaluation summary.
-- English/Hindi assistant replies and browser speech input where supported. The assistant uses local intent handling; it does not call a paid LLM.
+- English/Hindi customer interface, assistant replies and browser speech input where supported. The assistant uses local intent handling; it does not call a paid LLM. The picker exposes only fully bundled locales; see [localization notes](docs/LOCALIZATION.md) before adding another language.
 - FastAPI API docs, health endpoint, installable app shell, and offline caching of static screens. Offline API mutations are not queued.
 
 ## Data and machine learning
 
 ### Worker matching
 
-The existing `train.py`, `my_ml_core.py`, `model.joblib` and `evaluation_report.json` remain in the project. `/rank-candidates` preserves the previous ranking contract. Live booking matching filters to verified and available workers with a matching skill and service radius, then uses the saved classifier if it loads successfully. Otherwise it uses a documented fair-match score based on skill, distance, availability, rating, experience and certifications. The app returns the score method and factor values so the match is inspectable.
+The existing `train.py`, `my_ml_core.py`, `model.joblib` and `evaluation_report.json` remain in the project. `/rank-candidates` preserves the previous ranking contract. Live booking matching first filters verified and available workers by skill, service radius, and schedule conflicts. It then scores the entire candidate group with the saved classifier when compatible and blends that result with a transparent fair-match score based on distance, availability, rating, experience, certifications, and workload. A rule-based score remains available when the model artifact is unavailable. The app returns the score method and factor values so the match is inspectable.
 
 The committed allocation report is a baseline (ROC-AUC about 0.67, NDCG@5 about 0.765 on its holdout). Keep those as prototype results; do not present them as live-service performance. The source/provenance of the candidate CSV should be documented before drawing conclusions about generalization or representing it as real worker data.
 
+At booking time, the app uses current SQLite worker profiles, verification and availability, service skills, coordinates and coverage radius, current bookings, ratings, experience, certifications, rates, and account tenure. It filters candidates first, calculates relative model features across the entire eligible candidate set, and combines the saved model probability with a transparent fairness score. The response and persisted booking include the candidate count, assigned worker, score method, and score factors. Customer-created requests do not automatically retrain the classifier; they become platform records and live context for subsequent decisions.
+
 ### Demand forecasting
 
-`forecasting.py` builds a reproducible three-year synthetic daily panel across nine service categories and six Gurugram localities. It fits `HistGradientBoostingRegressor` and validates on the latest 90 days chronologically. The API reports MAE and RMSE from that holdout. The bar chart and 90th-percentile absolute-residual range are planning aids for this synthetic demonstration, not calibrated intervals. Suggested capacity is a heuristic (1.5 jobs per worker-shift), not a trained staffing recommendation.
+`forecasting.py` builds a reproducible three-year synthetic daily panel across nine service categories and six Gurugram localities. It fits `HistGradientBoostingRegressor` and validates on the latest 90 days chronologically. The API reports MAE and RMSE from that holdout. Once a category and locality have at least 10 non-cancelled past service requests spanning 28 days, the synthetic model forecast is calibrated to the platform's own recent booking history. Before that threshold, the app labels the result as synthetic. The model does not retrain on this small history.
+
+Workforce planning takes the peak predicted jobs per day, estimates staff at 1.5 jobs per worker-shift, and compares that peak need with verified, available workers who have the skill and cover the locality. The admin dashboard scans all 54 service/locality combinations and persists in-app recruitment alerts when a gap exists. Admins can mark recruitment as started; incoming workers still register and complete the existing verification flow. These are dashboard alerts, not external push, SMS, or email notifications. Locality centroids and the staffing ratio are explicit planning assumptions and must be validated with cooperative data.
 
 Replace simulated demand with dated cooperative bookings and weather/holiday features before making operational forecasts. Avoid random row splits for time-series claims. Report the dataset coverage, baseline comparisons, temporal holdout, MAE/RMSE, and limitations in your resume/demo.
 
@@ -60,14 +64,39 @@ Replace simulated demand with dated cooperative bookings and weather/holiday fea
 ## Project layout
 
 ```text
-api.py              FastAPI routes and role-based workflows
-platform_db.py      SQLite schema, password hashing, demo data
-forecasting.py      Synthetic panel, temporal evaluation, forecast API model
-train.py            Existing worker-allocation model training pipeline
-my_ml_core.py       Feature contract and ranking evaluation
-app/                Responsive installable PWA (HTML/CSS/JS)
-tests/              API workflow and model checks
+api.py                         Backward-compatible ASGI entry point (uvicorn api:app)
+fixmate/
+  main.py                      FastAPI app factory, lifecycle, and router registration
+  config.py                    Shared paths and environment-backed configuration
+  runtime.py                   Models initialized during application startup
+  schemas.py                   Validated API request models
+  security.py                  Session tokens and role-access dependencies
+  routers/
+    core.py                    Health, service catalog, and PWA shell routes
+    auth.py                    Registration, sign-in, and current-user routes
+    workers.py                 Worker profile, discovery, and availability routes
+    bookings.py                Booking lifecycle, reviews, payment records, invoices
+    assistant.py               Local assistant endpoint
+    insights.py                Forecast, cooperative analytics, admin, worker summary
+    matching.py                Backward-compatible candidate scoring API route
+  services/
+    matching.py                Candidate filtering, distance, model scoring, fair ranking
+    workforce_planning.py      Forecast-to-roster comparison and persisted shortage alerts
+    booking_serialization.py   Database-row to booking-response conversion
+platform_db.py                 SQLite schema, password hashing, demo data
+analysis.py                    Dataset profiling and workload fairness statistics
+forecasting.py                 Synthetic demand panel, temporal validation, forecaster
+train.py                       Worker-allocation model training pipeline
+my_ml_core.py                  Allocation feature contract and ranking evaluation
+model.joblib                   Saved worker-allocation model artifact
+evaluation_report.json         Committed model-evaluation results
+app/                           Responsive installable PWA (HTML/CSS/JS)
+  i18n.js                      English/Hindi UI dictionaries and locale formatting
+docs/                          Model documentation and project notes
+tests/                         API workflow and model checks
 ```
+
+The HTTP layer is grouped by product area; shared validation, authentication, and matching logic live in dedicated modules. `api.py` intentionally remains as a tiny compatibility entry point so the existing `uvicorn api:app` command and imports used by tests continue to work. The browser app keeps the same API paths and payloads across this refactor.
 
 ## Verify
 
