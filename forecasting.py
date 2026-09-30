@@ -75,15 +75,22 @@ class DemandForecaster:
         self.error_band = float(np.quantile(np.abs(residual), 0.9))
 
     def predict(self, service: str, locality: str, horizon: int = 30, booking_history=None):
-        if service not in SERVICES or locality not in LOCALITIES:
-            raise ValueError("Choose a listed service and locality")
+        if service not in SERVICES or not locality:
+            raise ValueError("Choose a listed service and provide an area name")
         horizon = min(max(int(horizon), 1), 90)
         start = date.today()
         calibration = self._history_calibration(service, locality, booking_history or [])
         daily = []
         for offset in range(horizon):
             day = start + timedelta(days=offset)
-            point = max(0.0, float(self.model.predict(np.asarray([_features(day, locality, service)], dtype=np.float32))[0]))
+            if locality in LOCALITIES:
+                prior = float(self.model.predict(np.asarray([_features(day, locality, service)], dtype=np.float32))[0])
+            else:
+                # The synthetic model has no geography outside its six demo localities.
+                # Use their average only as a clearly labelled cold-start prior.
+                features = np.asarray([_features(day, known, service) for known in LOCALITIES], dtype=np.float32)
+                prior = float(np.mean(self.model.predict(features)))
+            point = max(0.0, prior)
             point *= calibration["factor"]
             daily.append({"date": day.isoformat(), "predicted_jobs": round(point, 1),
                           "lower": round(max(0, point - self.error_band), 1),
@@ -131,8 +138,11 @@ class DemandForecaster:
         for offset in range(56):
             day = first_day + timedelta(days=offset)
             count = observed.get(day, 0)
-            feature_row = np.asarray([_features(day, locality, service)], dtype=np.float32)
-            model_values.append(max(0.1, float(self.model.predict(feature_row)[0])))
+            if locality in LOCALITIES:
+                feature_rows = np.asarray([_features(day, locality, service)], dtype=np.float32)
+            else:
+                feature_rows = np.asarray([_features(day, known, service) for known in LOCALITIES], dtype=np.float32)
+            model_values.append(max(0.1, float(np.mean(self.model.predict(feature_rows)))))
             observed_values.append(count)
         model_mean = float(np.mean(model_values))
         observed_mean = float(np.mean(observed_values))

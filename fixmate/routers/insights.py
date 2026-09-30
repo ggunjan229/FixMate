@@ -8,6 +8,7 @@ from fixmate.security import require_role
 from fixmate.services.matching import list_workers
 from fixmate.services.booking_serialization import booking_to_dict
 from fixmate.services.workforce_planning import (
+    _observed_areas,
     forecast_area,
     scan_all_areas,
     sync_scarcity_alert,
@@ -17,11 +18,18 @@ router = APIRouter()
 
 
 @router.get("/api/forecast")
-def forecast(service: str = "Plumbing", locality: str = "Sector 14", horizon: int = Query(30, ge=1, le=90), user=Depends(require_role("admin"))):
+def forecast(
+    service: str = "Plumbing",
+    locality: str = Query("Sector 14", min_length=1, max_length=100),
+    horizon: int = Query(30, ge=1, le=90),
+    latitude: float | None = Query(None, ge=-90, le=90),
+    longitude: float | None = Query(None, ge=-180, le=180),
+    user=Depends(require_role("admin")),
+):
     if not runtime.forecaster: raise HTTPException(503, "Forecast model is warming up")
     try:
         with store.connect() as db:
-            result = forecast_area(db, runtime.forecaster, service, locality, horizon)
+            result = forecast_area(db, runtime.forecaster, service, locality, horizon, latitude, longitude)
             sync_scarcity_alert(db, result)
         return result
     except ValueError as exc: raise HTTPException(422, str(exc))
@@ -33,8 +41,9 @@ def scan_workforce(user=Depends(require_role("admin"))):
     if not runtime.forecaster:
         raise HTTPException(503, "Forecast model is warming up")
     with store.connect() as db:
+        areas_scanned = len(_observed_areas(db)) * len(SERVICES)
         alerts = scan_all_areas(db, runtime.forecaster)
-    return {"alerts": alerts, "areas_scanned": len(SERVICES) * len(LOCALITIES)}
+    return {"alerts": alerts, "areas_scanned": areas_scanned}
 
 
 @router.patch("/api/admin/alerts/{alert_id}/recruitment")

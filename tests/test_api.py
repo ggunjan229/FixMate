@@ -110,9 +110,9 @@ def test_forecast_and_role_protection(client):
             scheduled = (datetime.now(timezone.utc) - timedelta(days=day_offset)).isoformat()
             db.execute(
                 """INSERT INTO bookings(customer_id,worker_id,service,scheduled_at,address,
-                   latitude,longitude,quoted_amount) VALUES(?,?,?,?,?,?,?,?)""",
+                   latitude,longitude,quoted_amount,created_at) VALUES(?,?,?,?,?,?,?,?,?)""",
                 (customer_id, worker_id, "Plumbing", scheduled, "Sector 14, Gurugram",
-                 28.4639, 77.0464, 350),
+                 28.4639, 77.0464, 350, scheduled),
             )
     calibrated = client.get(
         "/api/forecast?service=Plumbing&locality=Sector%2014&horizon=7", headers=admin
@@ -123,7 +123,7 @@ def test_forecast_and_role_protection(client):
 
     scan = client.post("/api/admin/workforce/scan", headers=admin)
     assert scan.status_code == 200, scan.text
-    assert scan.json()["areas_scanned"] == 54
+    assert scan.json()["areas_scanned"] >= 54
     assert any(
         alert["service"] == "Plumbing" and alert["locality"] == "Sector 14"
         for alert in scan.json()["alerts"]
@@ -137,14 +137,88 @@ def test_forecast_and_role_protection(client):
     assert profile["missing_cells"] == 0
 
 
-def test_public_services_workers_health_and_assistant(client):
+def test_outside_demo_region_booking_history_and_forecast(client):
+    """Outside-Gurugram customer and worker use the same live matching/forecast flow."""
+    customer = sign_in(client, "customer@fixmate.local", "customer123")
+    admin = sign_in(client, "admin@fixmate.local", "FixMate!2026")
+    worker_response = client.post("/api/auth/register", json={
+        "name": "Kolkata Plumber", "email": "kolkata.worker@example.test",
+        "phone": "9876508888", "password": "test-worker-pass", "role": "worker",
+    })
+    assert worker_response.status_code == 200, worker_response.text
+    worker_id = worker_response.json()["user"]["id"]
+    worker_headers = {"Authorization": f"Bearer {worker_response.json()['token']}"}
+    profile = client.put("/api/workers/profile", headers=worker_headers, json={
+        "skills": ["Plumbing"], "experience_years": 6, "certifications": ["ITI Plumbing"],
+        "hourly_rate": 400, "price_type": "per_visit", "latitude": 22.5726,
+        "longitude": 88.3639, "radius_km": 12, "bio": "Kolkata service area",
+    })
+    assert profile.status_code == 200 and not profile.json()["verified"]
+    verified = client.patch(f"/api/admin/workers/{worker_id}/verification?verified=true", headers=admin)
+    assert verified.status_code == 200
+
+    scheduled = (datetime_now_utc() + timedelta(days=1)).isoformat()
+    booked = client.post("/api/bookings", headers=customer, json={
+        "service": "Plumbing", "description": "Leaking kitchen tap", "scheduled_at": scheduled,
+        "address": "Salt Lake, Kolkata", "latitude": 22.5726, "longitude": 88.3639,
+        "quantity": 1, "payment_method": "cash",
+    })
+    assert booked.status_code == 200, booked.text
+    assert booked.json()["booking"]["worker_id"] == worker_id
+    assert booked.json()["matched_worker"]["distance_km"] == 0
+    assert booked.json()["eligible_workers_count"] == 1
+
+    # Seed dated local request history in the isolated test database. Real app
+    # records accumulate naturally from incoming customer bookings over time.
+    with store.connect() as db:
+        customer_id = db.execute("SELECT id FROM users WHERE role='customer'").fetchone()[0]
+        for day_offset in range(40, 0, -4):
+            request_time = (datetime_now_utc() - timedelta(days=day_offset)).isoformat()
+            db.execute(
+                """INSERT INTO bookings(customer_id,worker_id,service,scheduled_at,address,
+                   latitude,longitude,quoted_amount,created_at) VALUES(?,?,?,?,?,?,?,?,?)""",
+                (customer_id, worker_id, "Plumbing", request_time, "Salt Lake, Kolkata",
+                 22.5726, 88.3639, 400, request_time),
+            )
+    forecast = client.get(
+        "/api/forecast?service=Plumbing&locality=Salt%20Lake%2C%20Kolkata"
+        "&latitude=22.5726&longitude=88.3639&horizon=7", headers=admin,
+    )
+    assert forecast.status_code == 200, forecast.text
+    assert forecast.json()["area"]["name"] == "Salt Lake, Kolkata"
+    assert forecast.json()["data_source"] == "synthetic_model_calibrated_with_platform_bookings"
+    assert forecast.json()["real_bookings_used"] >= 10
+    assert forecast.json()["workforce"]["eligible_workers_available"] >= 1
+
+    scan = client.post("/api/admin/workforce/scan", headers=admin)
+    assert scan.status_code == 200, scan.text
+    assert scan.json()["areas_scanned"] > 54
+    local_alert = next(
+        (alert for alert in scan.json()["alerts"] if "22.573" in alert["locality"]), None
+    )
+    assert local_alert is not None
+    recruiting = client.patch(
+        f"/api/admin/alerts/{local_alert['id']}/recruitment?status=recruiting",
+        headers=admin,
+    )
+    assert recruiting.status_code == 200
+    assert recruiting.json()["recruitment_status"] == "recruiting"
+
+
+def test_public_services_workers_health_and_assistant(client, monkeypatch):
     assert client.get("/api/health").json()["status"] == "ok"
     assert len(client.get("/api/services").json()) == 9
     public = client.get("/api/workers?service=Plumbing").json()
     assert public and all(worker["verified"] and worker["available"] for worker in public)
     assert all("phone" not in worker and "email" not in worker for worker in public)
+    async def mock_answer_question(question, language, platform_context):
+        return "Choose a service, enter your address, and confirm a worker match."
+
+    monkeypatch.setattr("fixmate.routers.assistant.answer_question", mock_answer_question)
     answer = client.post("/api/assistant", json={"question":"How do I book a service?","language":"en"})
-    assert answer.status_code == 200 and answer.json()["action"] == "book"
+    assert answer.status_code == 200
+    assert answer.json()["action"] == "ask" and answer.json()["mode"] == "ai_service"
+    assert "Choose a service" in answer.json()["answer"]
 
 
 def test_existing_worker_allocation_model_endpoint(client):

@@ -14,13 +14,14 @@
 
 ## Workforce demand
 
-- **Purpose:** demonstrate short-horizon category-by-locality demand forecasts for capacity planning.
+- **Purpose:** demonstrate short-horizon category-by-area demand forecasts for capacity planning. Forecast requests use coordinates; the six built-in Gurugram areas remain demo defaults.
 - **Model:** scikit-learn `HistGradientBoostingRegressor` in `forecasting.py`.
 - **Data:** deterministic seeded synthetic panel generated in code (2023–2025); it is not observed booking history.
 - **Validation:** last 90 calendar days are held out chronologically; the API returns MAE and RMSE.
 - **Uncertainty:** the chart displays a 90th-percentile absolute residual band from synthetic holdout errors. This is not a calibrated statistical prediction interval.
-- **Real-history use:** after at least 10 non-cancelled past bookings spanning 28 days exist for a service/locality, the app calibrates the synthetic model level using a 56-day daily booking history. It does not retrain the model on sparse live records.
-- **Capacity heuristic:** required peak staffing = `ceil(peak predicted jobs per day / 1.5)`. The admin scan compares this with verified, available workers covering the locality and persists a recruitment alert when there is a gap. Productivity and locality-centre assumptions need validation with cooperative data.
+- **Cold start:** outside the six demo areas, the synthetic prior is the mean prediction across those areas. It is a generic demonstration baseline, not a locally validated forecast.
+- **Real-history use:** after at least 10 non-cancelled past bookings spanning 28 days exist for a service within 6 km of the requested coordinates, the app calibrates the synthetic model level using the last 56 days of booking creation dates. It uses real request volume from any covered area, but does not retrain the model on sparse live records.
+- **Capacity heuristic:** required peak staffing = `ceil(peak predicted jobs per day / 1.5)`. The admin scan checks the six demo areas plus coordinate areas found in booking records and completed worker profiles, then compares need with verified, available workers whose skills and service radius cover those coordinates. The productivity and 6 km history assumptions need cooperative data validation.
 
 ## Responsible use
 
