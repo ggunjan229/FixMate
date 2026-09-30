@@ -1,4 +1,4 @@
-# FixMate — Cooperative Services Marketplace
+# FixMate - Cooperative Services Marketplace
 
 **Local skills. Fair work. Shared prosperity.**
 
