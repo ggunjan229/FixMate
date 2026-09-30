@@ -1,20 +1,66 @@
-# FixMate — Cooperative Service Marketplace
+# FixMate — Cooperative Services Marketplace
 
-FixMate connects households with verified local service workers managed by labour cooperatives. This repository includes an installable mobile-first app, a FastAPI backend, a local SQLite database, an explainable worker matcher, and a time-validated demand-forecasting demonstration.
+**Local skills. Fair work. Shared prosperity.**
 
-## Run locally
+FixMate is an installable, mobile-first marketplace designed to help **labour cooperatives connect households and institutions with local cooperative workers**. It brings customer bookings, worker profiles, transparent matching, and cooperative administration into one application.
 
-Python 3.11 or newer is recommended.
+## What makes FixMate different
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn api:app --reload
+- **Cooperative-first:** Designed to keep local work and workforce planning visible to labour cooperatives and their members.
+- **Three role-based spaces:** Customers book services, workers manage their skills and jobs, and cooperative admins oversee verification and demand.
+- **Explainable worker matching:** Eligible workers are ranked using distance, skills, availability, experience, certificates, ratings, and workload. The booking records the candidate count and match factors.
+- **Demand-to-recruitment workflow:** Area forecasts are compared with the verified worker roster; staffing gaps create in-app admin alerts.
+- **Built for different locations:** Bookings, worker profiles, and forecasts use coordinates, so the workflow is not restricted to Gurugram. Actual matching still depends on verified workers covering the requested area.
+- **AI and voice help:** FixMate Helper can answer open-ended questions through an AI service; supported browsers can convert voice input to text.
+
+## Spaces and key features
+
+- **Customer:** Browse nine service categories, create scheduled or urgent bookings, share a service location, see the assigned worker and eligible-worker count, follow booking status, review service, and view an invoice or demo payment record.
+- **Worker:** Apply with service skills, experience, certificates, rates, service location, and travel radius; manage availability and assigned jobs; view completed work and welfare records. New profiles require cooperative admin verification before receiving bookings.
+- **Co-op admin:** Review and verify worker applications, monitor bookings and service activity, forecast demand by service and coordinates, review staffing shortages, and update recruitment status.
+
+## Data science and machine learning
+
+- **Smart allocation:** A saved scikit-learn model score is combined with an interpretable fairness score. Live requests use current worker and booking data; the model does not automatically retrain after each booking.
+- **Demand forecasting:** A `HistGradientBoostingRegressor` is trained on a reproducible, synthetic three-year panel and evaluated with a chronological 90-day holdout. Outside the six demo Gurugram areas, the synthetic prior is a labelled cold-start estimate.
+- **Real booking signal:** Non-cancelled requests within 6 km calibrate an area forecast after at least 10 requests spanning 28 days. This uses actual platform activity but does not retrain the forecasting model.
+- **Resume-ready honesty:** The saved allocation report shows ROC-AUC **0.670** and NDCG@5 **0.765** on its held-out dataset. These are prototype dataset metrics, not live-service accuracy or a guarantee of worker outcomes.
+
+## Technology stack
+
+- **App:** HTML, CSS, JavaScript, responsive Progressive Web App (PWA), service worker, browser geolocation, and browser speech recognition where supported.
+- **Backend:** Python, FastAPI, Pydantic, REST API, role-based access, and signed session tokens.
+- **Database:** SQLite for users, worker profiles, bookings, reviews, payment ledger records, and staffing alerts.
+- **Data science:** pandas, NumPy, scikit-learn, joblib, model evaluation, temporal validation, and workload analysis.
+- **Geospatial matching:** Latitude/longitude, Haversine distance, and worker service-radius checks.
+- **AI helper:** AI Pipe/OpenRouter-compatible chat API. Configure `AIPIPE_API_KEY` locally; never commit a real key.
+- **Quality checks:** pytest and HTTPX API workflow tests.
+
+## Architecture and workflow
+
+```mermaid
+flowchart LR
+    C[Customer] --> PWA[FixMate installable app]
+    W[Worker applicant] --> PWA
+    A[Co-op admin] --> PWA
+    PWA --> API[FastAPI API and role checks]
+    API --> DB[(SQLite platform data)]
+
+    API --> ELIG[Filter workers by verification, skill, availability, schedule, and travel radius]
+    ELIG --> SCORE[Rank candidates using ML score plus explainable fairness factors]
+    SCORE --> ASSIGN[Create booking and assign the best eligible worker]
+    ASSIGN --> DB
+
+    DB --> HIST[Area booking history and worker roster]
+    HIST --> FORECAST[Service demand forecast]
+    FORECAST --> GAP[Compare forecast staffing with eligible supply]
+    GAP --> ALERT[In-app recruitment alert]
+    ALERT --> A
+    A -->|Review and verify applications| DB
+
+    PWA -->|Question or voice-to-text| HELPER[FixMate Helper]
+    HELPER --> AI[Configured AI service]
 ```
-
-Open <http://127.0.0.1:8000>. FastAPI interactive API docs are at <http://127.0.0.1:8000/docs>. The first start creates `fixmate.db` and trains the demand model from a fixed, generated demonstration dataset. Startup can take several seconds.
-
-The app is a Progressive Web App (PWA): use the browser's **Install app** / **Add to Home Screen** action to run it in a standalone mobile window. Geolocation and speech recognition depend on browser support and secure-context rules; both have manual/text fallbacks.
 
 ## Demo accounts
 
@@ -26,77 +72,32 @@ The app is a Progressive Web App (PWA): use the browser's **Install app** / **Ad
 | Verified worker — electrical | `amit@fixmate.local` | `worker123` |
 | Cooperative admin | `admin@fixmate.local` | `FixMate!2026` |
 
-Other seeded worker accounts use `worker123`. These are local demo credentials only. Set `FIXMATE_ADMIN_EMAIL`, `FIXMATE_ADMIN_PASSWORD`, `FIXMATE_TOKEN_SECRET` and `FIXMATE_DB_PATH` in the environment before using a shared environment. Do not reuse the development defaults for a public deployment.
+These credentials are for local demonstrations only. Use private credentials and a strong token secret in any shared environment.
 
-## Included flows
+## Run locally
 
-- Customer registration and sign-in; browse nine service categories and worker profiles; request an urgent or scheduled booking with a location; see matching factors, status updates, invoice, demo payment record, and review form.
-- Worker registration, skill/certificate/rate/location profile, cooperative verification state, availability, assigned jobs, job state changes, earnings ledger, and welfare record.
-- Cooperative admin dashboard, worker verification/suspension, booking oversight, workforce demand forecast, and model evaluation summary.
-- English/Hindi customer interface, assistant replies and browser speech input where supported. The assistant uses local intent handling; it does not call a paid LLM. The picker exposes only fully bundled locales; see [localization notes](docs/LOCALIZATION.md) before adding another language.
-- FastAPI API docs, health endpoint, installable app shell, and offline caching of static screens. Offline API mutations are not queued.
+Python 3.11 or newer is recommended.
 
-## Data and machine learning
-
-### Worker matching
-
-The existing `train.py`, `my_ml_core.py`, `model.joblib` and `evaluation_report.json` remain in the project. `/rank-candidates` preserves the previous ranking contract. Live booking matching first filters verified and available workers by skill, service radius, and schedule conflicts. It then scores the entire candidate group with the saved classifier when compatible and blends that result with a transparent fair-match score based on distance, availability, rating, experience, certifications, and workload. A rule-based score remains available when the model artifact is unavailable. The app returns the score method and factor values so the match is inspectable.
-
-The committed allocation report is a baseline (ROC-AUC about 0.67, NDCG@5 about 0.765 on its holdout). Keep those as prototype results; do not present them as live-service performance. The source/provenance of the candidate CSV should be documented before drawing conclusions about generalization or representing it as real worker data.
-
-At booking time, the app uses current SQLite worker profiles, verification and availability, service skills, coordinates and coverage radius, current bookings, ratings, experience, certifications, rates, and account tenure. It filters candidates first, calculates relative model features across the entire eligible candidate set, and combines the saved model probability with a transparent fairness score. The response and persisted booking include the candidate count, assigned worker, score method, and score factors. Customer-created requests do not automatically retrain the classifier; they become platform records and live context for subsequent decisions.
-
-### Demand forecasting
-
-`forecasting.py` builds a reproducible three-year synthetic daily panel across nine service categories and six Gurugram localities. It fits `HistGradientBoostingRegressor` and validates on the latest 90 days chronologically. The API reports MAE and RMSE from that holdout. Once a category and locality have at least 10 non-cancelled past service requests spanning 28 days, the synthetic model forecast is calibrated to the platform's own recent booking history. Before that threshold, the app labels the result as synthetic. The model does not retrain on this small history.
-
-Workforce planning takes the peak predicted jobs per day, estimates staff at 1.5 jobs per worker-shift, and compares that peak need with verified, available workers who have the skill and cover the locality. The admin dashboard scans all 54 service/locality combinations and persists in-app recruitment alerts when a gap exists. Admins can mark recruitment as started; incoming workers still register and complete the existing verification flow. These are dashboard alerts, not external push, SMS, or email notifications. Locality centroids and the staffing ratio are explicit planning assumptions and must be validated with cooperative data.
-
-Replace simulated demand with dated cooperative bookings and weather/holiday features before making operational forecasts. Avoid random row splits for time-series claims. Report the dataset coverage, baseline comparisons, temporal holdout, MAE/RMSE, and limitations in your resume/demo.
-
-## Important prototype boundaries
-
-- `demo_digital` creates a visible ledger entry only. It does **not** charge a card, transfer money, or integrate a payment provider. Cash confirmation is also a demonstration record.
-- Worker verification is an admin workflow, not government identity verification. Welfare status is a cooperative record, not an insurance policy or government-benefit enrollment.
-- Demo coordinates and workers are seed records around Gurugram. The platform is not yet connected to a production cooperative roster, map/geocoding provider, messaging/SMS service, or external identity provider.
-- This is a local prototype with development defaults and a browser token. Harden secrets, CORS, rate limits, consent, data retention, deployment TLS, and payment/identity integrations before real users.
-
-## Project layout
-
-```text
-api.py                         Backward-compatible ASGI entry point (uvicorn api:app)
-fixmate/
-  main.py                      FastAPI app factory, lifecycle, and router registration
-  config.py                    Shared paths and environment-backed configuration
-  runtime.py                   Models initialized during application startup
-  schemas.py                   Validated API request models
-  security.py                  Session tokens and role-access dependencies
-  routers/
-    core.py                    Health, service catalog, and PWA shell routes
-    auth.py                    Registration, sign-in, and current-user routes
-    workers.py                 Worker profile, discovery, and availability routes
-    bookings.py                Booking lifecycle, reviews, payment records, invoices
-    assistant.py               Local assistant endpoint
-    insights.py                Forecast, cooperative analytics, admin, worker summary
-    matching.py                Backward-compatible candidate scoring API route
-  services/
-    matching.py                Candidate filtering, distance, model scoring, fair ranking
-    workforce_planning.py      Forecast-to-roster comparison and persisted shortage alerts
-    booking_serialization.py   Database-row to booking-response conversion
-platform_db.py                 SQLite schema, password hashing, demo data
-analysis.py                    Dataset profiling and workload fairness statistics
-forecasting.py                 Synthetic demand panel, temporal validation, forecaster
-train.py                       Worker-allocation model training pipeline
-my_ml_core.py                  Allocation feature contract and ranking evaluation
-model.joblib                   Saved worker-allocation model artifact
-evaluation_report.json         Committed model-evaluation results
-app/                           Responsive installable PWA (HTML/CSS/JS)
-  i18n.js                      English/Hindi UI dictionaries and locale formatting
-docs/                          Model documentation and project notes
-tests/                         API workflow and model checks
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn api:app --reload
 ```
 
-The HTTP layer is grouped by product area; shared validation, authentication, and matching logic live in dedicated modules. `api.py` intentionally remains as a tiny compatibility entry point so the existing `uvicorn api:app` command and imports used by tests continue to work. The browser app keeps the same API paths and payloads across this refactor.
+Open <http://127.0.0.1:8000>. Interactive API documentation is at <http://127.0.0.1:8000/docs>. The first startup creates `fixmate.db` and trains the demonstration demand model. Install the PWA through the browser's **Install app** or **Add to Home Screen** option.
+
+## Communication and documentation
+
+- Booking status and recruitment-gap alerts appear in the app; the current prototype does not send SMS, email, or push notifications.
+- The AI Helper uses `AIPIPE_API_KEY`; without it, the helper reports that the AI service is not configured. Voice input depends on browser support and permission.
+- Read [the model card](docs/MODEL_CARD.md) for data, evaluation, and limitations, and [localization notes](docs/LOCALIZATION.md) for the current English/Hindi interface.
+
+## Prototype boundaries
+
+- Payment choices create demo ledger records; they do not move money or connect to a payment provider.
+- Worker verification and welfare fields are cooperative records, not government identity checks or proof of insurance enrollment.
+- Addresses are stored as text. Location matching uses coordinates shared by the customer and worker; no address-geocoding provider is connected.
+- Forecast results outside areas with enough real booking history are cold-start estimates and should not be presented as locally validated demand.
 
 ## Verify
 
