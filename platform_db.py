@@ -114,7 +114,6 @@ def init_db() -> None:
             return
 
         admin_email = os.getenv("FIXMATE_ADMIN_EMAIL", "admin@fixmate.local").lower()
-        admin_password = os.getenv("FIXMATE_ADMIN_PASSWORD", "FixMate!2026")
         db.execute("INSERT INTO users(name,email,phone,password_hash,role) VALUES(?,?,?,?,?)",
                    ("Cooperative Admin", admin_email, "9876543210", hash_password(admin_password), "admin"))
         demo_workers = [
