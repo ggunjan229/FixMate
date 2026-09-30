@@ -9,7 +9,6 @@ const state = {
     ? localStorage.getItem("fixmate_lang")
     : "en",
   filter: "all",
-  forecast: null,
 };
 const icons = {
   Plumbing: "🔧",
@@ -112,12 +111,28 @@ function dateFmt(
   }
 }
 function toast(message, error = false) {
-  const el = $("#toast");
+  const el = $("#toast"),
+    dialog = document.querySelector("dialog[open]");
   el.textContent = fixmateTranslate(message, state.lang);
   el.classList.toggle("error", error);
+  if (dialog && el.parentElement !== dialog) {
+    dialog.appendChild(el);
+    dialog.addEventListener(
+      "close",
+      () => {
+        if (el.classList.contains("show")) document.body.appendChild(el);
+      },
+      { once: true },
+    );
+  } else if (!dialog && el.parentElement !== document.body) {
+    document.body.appendChild(el);
+  }
   el.classList.add("show");
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => el.classList.remove("show"), 3200);
+  toast.timer = setTimeout(() => {
+    el.classList.remove("show");
+    if (el.parentElement !== document.body) document.body.appendChild(el);
+  }, 3200);
 }
 function initials(name = "Guest") {
   return name
@@ -814,9 +829,9 @@ function setAuthMode(mode) {
     ? "Create an account as a customer or worker."
     : "Sign in to book a service or manage your cooperative work.";
   const form = $("#auth-form");
-  form.elements.name.hidden = !reg;
+  $("#name-field").hidden = !reg;
   form.elements.name.required = reg;
-  form.elements.phone.hidden = !reg;
+  $("#phone-field").hidden = !reg;
   form.elements.phone.required = reg;
   $("#role-field").hidden = !reg;
   form.elements.password.autocomplete = reg
