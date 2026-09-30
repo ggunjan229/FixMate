@@ -113,7 +113,6 @@ def init_db() -> None:
         if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
             return
 
-        admin_email = os.getenv("FIXMATE_ADMIN_EMAIL", "admin@fixmate.local").lower()
         db.execute("INSERT INTO users(name,email,phone,password_hash,role) VALUES(?,?,?,?,?)",
                    ("Cooperative Admin", admin_email, "9876543210", hash_password(admin_password), "admin"))
         demo_workers = [
