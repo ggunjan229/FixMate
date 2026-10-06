@@ -4,6 +4,8 @@
 
 FixMate is an installable, mobile-first marketplace designed to help **labour cooperatives connect households and institutions with local cooperative workers**. It brings customer bookings, worker profiles, transparent matching, and cooperative administration into one application.
 
+![](app/Fixmate.png)
+
 ## What makes FixMate different
 
 - **Cooperative-first:** Designed to keep local work and workforce planning visible to labour cooperatives and their members.
